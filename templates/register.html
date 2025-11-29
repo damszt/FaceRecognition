@@ -1,0 +1,33 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">Register New Person</div>
+            <div class="card-body text-center">
+                <div class="mb-3">
+                    <input type="text" id="personName" class="form-control" placeholder="Enter Person Name">
+                </div>
+
+                <div class="video-container mb-3">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas"></canvas>
+                </div>
+
+                <button id="startBtn" class="btn btn-primary">Start Camera</button>
+                <button id="captureBtn" class="btn btn-success" disabled>Capture Dataset</button>
+
+                <div id="status" class="status-message text-info"></div>
+                <div class="progress mt-3" style="display:none;">
+                    <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/register.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,28 @@
+body {
+    background-color: #f8f9fa;
+}
+
+.video-container {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+video {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+canvas {
+    display: none;
+}
+
+.status-message {
+    margin-top: 10px;
+    font-weight: bold;
+}

@@ -1,0 +1,321 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Attendance Dashboard</span>
+                <div>
+                    <input type="date" id="datePicker" class="form-control form-control-sm">
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Registered People</h5>
+                                <p class="card-text display-6" id="totalPeople">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Total Images</h5>
+                                <p class="card-text display-6" id="totalImages">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Last Trained</h5>
+                                <p class="card-text fs-5" id="lastTrained">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">Confidence Distribution (LBPH)</div>
+                            <div class="card-body">
+                                <canvas id="confidenceChart" style="max-height: 300px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card border-info">
+                            <div class="card-header bg-info text-white">Analysis & Insights</div>
+                            <div class="card-body">
+                                <h5>Understanding LBPH Confidence</h5>
+                                <p>
+                                    The <strong>LBPH (Local Binary Patterns Histograms)</strong> confidence score
+                                    represents the "distance" between the captured face and the trained model.
+                                    Unlike probability (where higher is better), <strong>lower is better</strong> for
+                                    LBPH.
+                                </p>
+                                <ul>
+                                    <li><strong>0 - 50:</strong> Excellent Match (Very confident)</li>
+                                    <li><strong>50 - 80:</strong> Good Match (Acceptable)</li>
+                                    <li><strong>80+:</strong> Weak Match (Likely Unknown or poor lighting)</li>
+                                </ul>
+                                <hr>
+                                <h5>Today's Performance</h5>
+                                <div class="row text-center">
+                                    <div class="col-md-4">
+                                        <h6>Average Confidence</h6>
+                                        <p class="display-6" id="avgConfidence">-</p>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <h6>High Quality Matches (< 50)</h6>
+                                                <p class="display-6" id="highQualityPercent">-</p>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <h6>Model Status</h6>
+                                        <p class="fs-5 text-muted" id="modelStatus">-</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Timestamp</th>
+                            <th>Confidence (LBPH)</th>
+                            <th>Metric Logic</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                        <!-- Logs will be inserted here -->
+                    </tbody>
+                </table>
+                <div id="noLogs" class="text-center text-muted" style="display:none;">No records found for this date.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Distance Matrix</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Candidate</th>
+                            <th>Distance</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modalTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const datePicker = document.getElementById('datePicker');
+    const tableBody = document.getElementById('logsTableBody');
+    const noLogs = document.getElementById('noLogs');
+    let chartInstance = null;
+    const THRESHOLD = 60; // Hardcoded to match app.py
+
+    // Store logs globally to access details
+    let currentLogs = [];
+
+    // Set default date to today
+    datePicker.valueAsDate = new Date();
+
+    async function loadLogs() {
+        const date = datePicker.value;
+        try {
+            const response = await fetch(`/api/logs?date=${date}`);
+            currentLogs = await response.json();
+
+            tableBody.innerHTML = '';
+
+            const confidences = [];
+
+            if (currentLogs.length === 0) {
+                noLogs.style.display = 'block';
+            } else {
+                noLogs.style.display = 'none';
+                currentLogs.forEach((log, index) => {
+                    let logic = "N/A";
+
+                    if (log.confidence && log.confidence !== 'N/A') {
+                        const conf = parseFloat(log.confidence);
+                        confidences.push(conf);
+                        logic = `Chi-Square Dist: ${conf.toFixed(2)}`;
+                    }
+
+                    const row = `<tr>
+                        <td>${log.name}</td>
+                        <td>${log.timestamp}</td>
+                        <td>${log.confidence || 'N/A'}</td>
+                        <td><code>${logic}</code></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info" onclick="showDetails(${index})">
+                                View Matrix
+                            </button>
+                        </td>
+                    </tr>`;
+                    tableBody.innerHTML += row;
+                });
+            }
+
+            updateChart(confidences);
+            updateAnalysis(confidences);
+
+        } catch (err) {
+            console.error("Error loading logs:", err);
+        }
+    }
+
+    function showDetails(index) {
+        const log = currentLogs[index];
+        const modalBody = document.getElementById('modalTableBody');
+        modalBody.innerHTML = '';
+
+        if (log.details && log.details.length > 0) {
+            log.details.forEach(d => {
+                const isMatch = d.distance < THRESHOLD;
+                const row = `<tr class="${isMatch ? 'table-success' : ''}">
+                    <td>${d.name}</td>
+                    <td>${d.distance.toFixed(2)}</td>
+                    <td>${isMatch ? 'Match' : 'No Match'}</td>
+                </tr>`;
+                modalBody.innerHTML += row;
+            });
+        } else {
+            modalBody.innerHTML = '<tr><td colspan="3" class="text-center">No details available</td></tr>';
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+        modal.show();
+    }
+
+    function updateAnalysis(data) {
+        const avgEl = document.getElementById('avgConfidence');
+        const qualityEl = document.getElementById('highQualityPercent');
+        const statusEl = document.getElementById('modelStatus');
+
+        if (data.length === 0) {
+            avgEl.innerText = "-";
+            qualityEl.innerText = "-";
+            statusEl.innerText = "No data available.";
+            return;
+        }
+
+        // Calculate Average
+        const sum = data.reduce((a, b) => a + b, 0);
+        const avg = (sum / data.length).toFixed(2);
+        avgEl.innerText = avg;
+
+        // Calculate High Quality % (< 50)
+        const highQualityCount = data.filter(v => v < 50).length;
+        const qualityPercent = ((highQualityCount / data.length) * 100).toFixed(1);
+        qualityEl.innerText = qualityPercent + "%";
+
+        // Interpretation
+        if (avg < 50) {
+            statusEl.innerText = "Excellent. The model is very confident.";
+            statusEl.className = "fs-5 text-success fw-bold";
+        } else if (avg < 80) {
+            statusEl.innerText = "Good. Performance is stable.";
+            statusEl.className = "fs-5 text-primary fw-bold";
+        } else {
+            statusEl.innerText = "Weak. Consider retraining or checking lighting.";
+            statusEl.className = "fs-5 text-danger fw-bold";
+        }
+    }
+
+    function updateChart(data) {
+        const ctx = document.getElementById('confidenceChart').getContext('2d');
+
+        // Create bins: 0-10, 10-20, ... 90-100+
+        const bins = new Array(11).fill(0);
+        const labels = ["0-10", "10-20", "20-30", "30-40", "40-50", "50-60", "60-70", "70-80", "80-90", "90-100", "100+"];
+
+        data.forEach(val => {
+            if (val >= 100) {
+                bins[10]++;
+            } else {
+                const binIndex = Math.floor(val / 10);
+                if (binIndex >= 0 && binIndex < 10) {
+                    bins[binIndex]++;
+                }
+            }
+        });
+
+        if (chartInstance) {
+            chartInstance.destroy();
+        }
+
+        chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Frequency',
+                    data: bins,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    datePicker.addEventListener('change', loadLogs);
+
+    // Initial load
+    loadLogs();
+    loadStats();
+
+    async function loadStats() {
+        try {
+            const response = await fetch('/api/stats');
+            const stats = await response.json();
+
+            document.getElementById('totalPeople').innerText = stats.total_people;
+            document.getElementById('totalImages').innerText = stats.total_images;
+            document.getElementById('lastTrained').innerText = stats.last_trained;
+        } catch (err) {
+            console.error("Error loading stats:", err);
+        }
+    }
+</script>
+{% endblock %}
