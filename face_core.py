@@ -36,6 +36,11 @@ def get_labels_path():
             return "labels.npy"
     return LABELS_FILE
 
+def get_cascade_path():
+    if os.path.exists("haarcascade_frontalface_default.xml"):
+        return "haarcascade_frontalface_default.xml"
+    return cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+
 def save_face_image(person_name, image_data_base64):
     """
     Decodes base64 image, detects face, and saves it to dataset/{person_name}/.
@@ -51,7 +56,7 @@ def save_face_image(person_name, image_data_base64):
             return False
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        face_cascade = cv2.CascadeClassifier(get_cascade_path())
         faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
         if len(faces) == 0:
@@ -190,7 +195,7 @@ def recognize_face(image_data_base64):
             return None, None, None
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        face_cascade = cv2.CascadeClassifier(get_cascade_path())
         faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
         if len(faces) == 0:
