@@ -21,19 +21,23 @@ else:
     ATTENDANCE_FILE_PREFIX = "attendance_"
 
 def get_model_path():
-    if IS_VERCEL:
-        if os.path.exists(MODEL_FILE):
-            return MODEL_FILE
-        if os.path.exists("model.yml"):
-            return "model.yml"
+    # Prefer root/script-dir file (deployed via git) over /tmp (ephemeral)
+    root_model = os.path.join(_SCRIPT_DIR, "model.yml")
+    if os.path.exists(root_model):
+        return root_model
+    # Fall back to /tmp version (after training on Vercel)
+    if os.path.exists(MODEL_FILE):
+        return MODEL_FILE
     return MODEL_FILE
 
 def get_labels_path():
-    if IS_VERCEL:
-        if os.path.exists(LABELS_FILE):
-            return LABELS_FILE
-        if os.path.exists("labels.npy"):
-            return "labels.npy"
+    # Prefer root/script-dir file (deployed via git) over /tmp (ephemeral)
+    root_labels = os.path.join(_SCRIPT_DIR, "labels.npy")
+    if os.path.exists(root_labels):
+        return root_labels
+    # Fall back to /tmp version (after training on Vercel)
+    if os.path.exists(LABELS_FILE):
+        return LABELS_FILE
     return LABELS_FILE
 
 # Absolute directory where this script lives — works on Vercel too
