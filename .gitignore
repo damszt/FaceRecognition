@@ -7,8 +7,6 @@ env/
 
 # Project specific
 dataset/
-model.yml
-labels.npy
 attendance_*.csv
 check_opencv.py
 check_collector.py
