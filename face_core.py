@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 import cv2
 import os
 import numpy as np
@@ -339,3 +340,39 @@ def get_model_stats():
         stats["last_trained"] = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
         
     return stats
+
+def clear_dataset(person_name=None):
+    """
+    Clears registered datasets.
+    If person_name is provided, deletes the specific person's dataset folder inside DATASET_DIR.
+    If person_name is None, deletes all person folders inside DATASET_DIR.
+    Also deletes the trained model files (MODEL_FILE and LABELS_FILE) if they exist.
+    Returns True on success, False otherwise.
+    """
+    try:
+        import shutil
+        if person_name:
+            person_dir = os.path.join(DATASET_DIR, person_name)
+            if os.path.exists(person_dir):
+                shutil.rmtree(person_dir)
+        else:
+            if os.path.exists(DATASET_DIR):
+                for name in os.listdir(DATASET_DIR):
+                    path = os.path.join(DATASET_DIR, name)
+                    if os.path.isdir(path):
+                        shutil.rmtree(path)
+            
+            if os.path.exists(MODEL_FILE):
+                os.remove(MODEL_FILE)
+            if os.path.exists(LABELS_FILE):
+                os.remove(LABELS_FILE)
+                
+            global recognizer, labels_map
+            recognizer = None
+            labels_map = None
+            
+        return True
+    except Exception as e:
+        print(f"Error clearing dataset: {e}")
+        return False
+

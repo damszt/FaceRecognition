@@ -104,5 +104,18 @@ def api_stats():
     stats = face_core.get_model_stats()
     return jsonify(stats)
 
+@app.route('/api/clear', methods=['POST'])
+def api_clear():
+    data = request.json or {}
+    name = data.get('name')
+    success = face_core.clear_dataset(name)
+    if success:
+        # Re-initialize state since model files might have been deleted
+        face_core.load_resources()
+        msg = f"Dataset for {name} has been deleted." if name else "All dynamic datasets and trained models have been cleared."
+        return jsonify({"success": True, "message": msg})
+    else:
+        return jsonify({"success": False, "message": "Failed to clear dataset."}), 500
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
