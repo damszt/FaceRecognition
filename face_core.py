@@ -332,42 +332,57 @@ def get_attendance_logs(date_str=None):
 def get_model_stats():
     """
     Returns statistics about the dataset and model.
+    Falls back to reading registered people from labels.npy if dataset folder is empty.
     """
     stats = {
         "total_people": 0,
         "total_images": 0,
         "last_trained": "Never"
     }
-    
-    # Check both directories on Vercel
+
+    # Check dataset directories
     dirs_to_check = []
     if IS_VERCEL:
         if os.path.exists("/tmp/dataset"):
             dirs_to_check.append("/tmp/dataset")
-        if os.path.exists("dataset"):
-            dirs_to_check.append("dataset")
+        root_dataset = os.path.join(_SCRIPT_DIR, "dataset")
+        if os.path.exists(root_dataset):
+            dirs_to_check.append(root_dataset)
     else:
         if os.path.exists(DATASET_DIR):
             dirs_to_check.append(DATASET_DIR)
-            
+
     people_sets = set()
     total_images = 0
-    
+
     for d in dirs_to_check:
         people = [p for p in os.listdir(d) if os.path.isdir(os.path.join(d, p))]
         people_sets.update(people)
         for p in people:
             path = os.path.join(d, p)
             total_images += len([f for f in os.listdir(path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
-            
+
     stats["total_people"] = len(people_sets)
     stats["total_images"] = total_images
-        
+
+    # If dataset folder is empty but model exists, read people count from labels.npy
+    if stats["total_people"] == 0:
+        labels_path = get_labels_path()
+        if os.path.exists(labels_path):
+            try:
+                label_map = np.load(labels_path, allow_pickle=True).item()
+                stats["total_people"] = len(label_map)
+                stats["total_images"] = -1  # Unknown (model deployed without dataset)
+                stats["people_names"] = list(label_map.values())
+            except Exception as e:
+                print(f"Could not read labels: {e}")
+
     model_path = get_model_path()
     if os.path.exists(model_path):
         mtime = os.path.getmtime(model_path)
         stats["last_trained"] = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
-        
+
+
     return stats
 
 def clear_dataset(person_name=None):

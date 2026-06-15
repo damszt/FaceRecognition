@@ -312,8 +312,23 @@
             const stats = await response.json();
 
             document.getElementById('totalPeople').innerText = stats.total_people;
-            document.getElementById('totalImages').innerText = stats.total_images;
+            // total_images = -1 means model was deployed without dataset folder
+            document.getElementById('totalImages').innerText =
+                stats.total_images === -1 ? 'N/A' : stats.total_images;
             document.getElementById('lastTrained').innerText = stats.last_trained;
+
+            // Show registered names if available from labels.npy
+            if (stats.people_names && stats.people_names.length > 0) {
+                const existing = document.getElementById('peopleNamesList');
+                if (!existing) {
+                    const el = document.createElement('p');
+                    el.id = 'peopleNamesList';
+                    el.style.cssText = 'font-size:0.85rem;color:#555;margin-top:4px;';
+                    el.innerText = 'People: ' + stats.people_names.join(', ');
+                    document.getElementById('totalPeople').closest('.stat-card')
+                        ?.appendChild(el);
+                }
+            }
         } catch (err) {
             console.error("Error loading stats:", err);
         }
