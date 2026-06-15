@@ -53,21 +53,24 @@ async function recognizeFrame() {
             body: JSON.stringify({ image: dataURL })
         });
 
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Server returned ${response.status}: ${errText}`);
+        }
+
         const result = await response.json();
 
         if (result.success) {
             lastRecDiv.innerText = result.message;
             lastRecDiv.style.display = 'block';
-
-            // Optional: Speak the name
-            if ('speechSynthesis' in window) {
-                // Simple debounce for speech could be added here if needed
-            }
+            lastRecDiv.className = "alert alert-success mt-3";
+            statusDiv.innerText = "Match found!";
         } else {
-            // statusDiv.innerText = "Scanning...";
+            statusDiv.innerText = result.message || "Scanning...";
         }
     } catch (err) {
         console.error("Error recognizing:", err);
+        statusDiv.innerText = "Error: " + err.message;
     } finally {
         isRecognizing = false;
     }
