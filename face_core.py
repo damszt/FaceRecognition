@@ -36,9 +36,19 @@ def get_labels_path():
             return "labels.npy"
     return LABELS_FILE
 
+# Absolute directory where this script lives — works on Vercel too
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 def get_cascade_path():
-    if os.path.exists("haarcascade_frontalface_default.xml"):
-        return "haarcascade_frontalface_default.xml"
+    # First try: bundled XML next to this script (most reliable on Vercel)
+    local_path = os.path.join(_SCRIPT_DIR, "haarcascade_frontalface_default.xml")
+    if os.path.exists(local_path):
+        return local_path
+    # Second try: cwd-relative
+    cwd_path = os.path.join(os.getcwd(), "haarcascade_frontalface_default.xml")
+    if os.path.exists(cwd_path):
+        return cwd_path
+    # Last fallback: OpenCV data dir
     return cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
 
 def save_face_image(person_name, image_data_base64):
@@ -57,7 +67,12 @@ def save_face_image(person_name, image_data_base64):
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         face_cascade = cv2.CascadeClassifier(get_cascade_path())
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        faces = face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=3,
+            minSize=(30, 30)
+        )
 
         if len(faces) == 0:
             return False
@@ -196,7 +211,12 @@ def recognize_face(image_data_base64):
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         face_cascade = cv2.CascadeClassifier(get_cascade_path())
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        faces = face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=3,
+            minSize=(30, 30)
+        )
 
         if len(faces) == 0:
             return None, None, None
@@ -352,34 +372,67 @@ def clear_dataset(person_name=None):
     If person_name is provided, deletes the specific person's dataset folder inside DATASET_DIR.
     If person_name is None, deletes all person folders inside DATASET_DIR.
     Also deletes the trained model files (MODEL_FILE and LABELS_FILE) if they exist.
+    On Vercel, also clears root-level dataset/ and model files since /tmp is ephemeral.
     Returns (True, message) on success, (False, error_message) otherwise.
     """
     try:
         import shutil
         deleted_count = 0
+
+        # Determine all dataset directories to clear
+        dataset_dirs_to_clear = [DATASET_DIR]
+        if IS_VERCEL:
+            # Also clear root-level dataset dir in case it's the active one
+            root_dataset = os.path.join(_SCRIPT_DIR, "dataset")
+            if root_dataset != DATASET_DIR and os.path.exists(root_dataset):
+                dataset_dirs_to_clear.append(root_dataset)
+
         if person_name:
-            person_dir = os.path.join(DATASET_DIR, person_name)
-            if os.path.exists(person_dir):
-                shutil.rmtree(person_dir)
-                deleted_count += 1
+            for d in dataset_dirs_to_clear:
+                person_dir = os.path.join(d, person_name)
+                if os.path.exists(person_dir):
+                    shutil.rmtree(person_dir)
+                    deleted_count += 1
         else:
-            if os.path.exists(DATASET_DIR):
-                for name in os.listdir(DATASET_DIR):
-                    path = os.path.join(DATASET_DIR, name)
-                    if os.path.isdir(path):
-                        shutil.rmtree(path)
-                        deleted_count += 1
-            
-            if os.path.exists(MODEL_FILE):
-                os.remove(MODEL_FILE)
-            if os.path.exists(LABELS_FILE):
-                os.remove(LABELS_FILE)
-                
+            for d in dataset_dirs_to_clear:
+                if os.path.exists(d):
+                    for entry in os.listdir(d):
+                        path = os.path.join(d, entry)
+                        if os.path.isdir(path):
+                            shutil.rmtree(path)
+                            deleted_count += 1
+
+            # Delete model files — both /tmp and root locations
+            model_files_to_delete = [MODEL_FILE]
+            labels_files_to_delete = [LABELS_FILE]
+            if IS_VERCEL:
+                root_model = os.path.join(_SCRIPT_DIR, "model.yml")
+                root_labels = os.path.join(_SCRIPT_DIR, "labels.npy")
+                if root_model not in model_files_to_delete:
+                    model_files_to_delete.append(root_model)
+                if root_labels not in labels_files_to_delete:
+                    labels_files_to_delete.append(root_labels)
+
+            for mf in model_files_to_delete:
+                if os.path.exists(mf):
+                    try:
+                        os.remove(mf)
+                    except Exception as e:
+                        print(f"Could not delete {mf}: {e}")
+            for lf in labels_files_to_delete:
+                if os.path.exists(lf):
+                    try:
+                        os.remove(lf)
+                    except Exception as e:
+                        print(f"Could not delete {lf}: {e}")
+
             global recognizer, labels_map
             recognizer = None
             labels_map = None
-            
-        msg = f"Dataset for {person_name} has been deleted." if person_name else f"All dynamic datasets and trained models have been cleared. Deleted {deleted_count} directories."
+
+        msg = (f"Dataset for '{person_name}' has been deleted."
+               if person_name
+               else f"All datasets and trained models have been cleared. Deleted {deleted_count} person folders.")
         return True, msg
     except Exception as e:
         error_msg = f"Error clearing dataset: {e}"
