@@ -81,7 +81,18 @@ def train_model():
     Returns a summary string.
     """
     try:
-        if not os.path.exists(DATASET_DIR):
+        # Determine dataset directories to check
+        dirs_to_check = []
+        if IS_VERCEL:
+            if os.path.exists("/tmp/dataset"):
+                dirs_to_check.append("/tmp/dataset")
+            if os.path.exists("dataset"):
+                dirs_to_check.append("dataset")
+        else:
+            if os.path.exists(DATASET_DIR):
+                dirs_to_check.append(DATASET_DIR)
+                
+        if not dirs_to_check:
             return "Dataset directory not found."
 
         faces = []
@@ -89,28 +100,35 @@ def train_model():
         label_map = {}
         current_id = 0
         
-        # Traverse dataset directory
-        for person_name in os.listdir(DATASET_DIR):
-            person_path = os.path.join(DATASET_DIR, person_name)
-            if not os.path.isdir(person_path):
-                continue
-                
+        # Traverse all checked dataset directories, grouping by person name
+        people_images = {}
+        for d in dirs_to_check:
+            for person_name in os.listdir(d):
+                person_path = os.path.join(d, person_name)
+                if not os.path.isdir(person_path):
+                    continue
+                if person_name not in people_images:
+                    people_images[person_name] = []
+                for image_name in os.listdir(person_path):
+                    if image_name.startswith("."):
+                        continue
+                    people_images[person_name].append(os.path.join(person_path, image_name))
+        
+        if not people_images:
+            return "No training data found."
+
+        for person_name, image_paths in people_images.items():
             label_map[current_id] = person_name
-            
-            for image_name in os.listdir(person_path):
-                if image_name.startswith("."): continue # Skip hidden files
-                
-                image_path = os.path.join(person_path, image_name)
+            for image_path in image_paths:
                 try:
                     # Read image in grayscale
                     img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-                    if img is None: continue
-                    
+                    if img is None:
+                        continue
                     faces.append(img)
                     ids.append(current_id)
                 except Exception as e:
                     print(f"Error reading {image_path}: {e}")
-            
             current_id += 1
 
         if not faces:
@@ -291,15 +309,29 @@ def get_model_stats():
         "last_trained": "Never"
     }
     
-    if os.path.exists(DATASET_DIR):
-        people = [p for p in os.listdir(DATASET_DIR) if os.path.isdir(os.path.join(DATASET_DIR, p))]
-        stats["total_people"] = len(people)
-        
-        count = 0
+    # Check both directories on Vercel
+    dirs_to_check = []
+    if IS_VERCEL:
+        if os.path.exists("/tmp/dataset"):
+            dirs_to_check.append("/tmp/dataset")
+        if os.path.exists("dataset"):
+            dirs_to_check.append("dataset")
+    else:
+        if os.path.exists(DATASET_DIR):
+            dirs_to_check.append(DATASET_DIR)
+            
+    people_sets = set()
+    total_images = 0
+    
+    for d in dirs_to_check:
+        people = [p for p in os.listdir(d) if os.path.isdir(os.path.join(d, p))]
+        people_sets.update(people)
         for p in people:
-            path = os.path.join(DATASET_DIR, p)
-            count += len([f for f in os.listdir(path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
-        stats["total_images"] = count
+            path = os.path.join(d, p)
+            total_images += len([f for f in os.listdir(path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+            
+    stats["total_people"] = len(people_sets)
+    stats["total_images"] = total_images
         
     model_path = get_model_path()
     if os.path.exists(model_path):
