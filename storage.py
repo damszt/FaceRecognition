@@ -17,9 +17,15 @@ BLOB_API_URL = "https://blob.vercel-storage.com"
 IS_VERCEL = "VERCEL" in os.environ or "AWS_LAMBDA_FUNCTION_NAME" in os.environ
 
 # Local fallback directories
-LOCAL_DATASET_DIR = "dataset"
-LOCAL_MODEL_FILE = "model.yml"
-LOCAL_LABELS_FILE = "labels.npy"
+# On Vercel without Blob token, use /tmp (writable). Locally use dataset/
+if IS_VERCEL:
+    LOCAL_DATASET_DIR = "/tmp/dataset"
+    LOCAL_MODEL_FILE = "/tmp/model.yml"
+    LOCAL_LABELS_FILE = "/tmp/labels.npy"
+else:
+    LOCAL_DATASET_DIR = "dataset"
+    LOCAL_MODEL_FILE = "model.yml"
+    LOCAL_LABELS_FILE = "labels.npy"
 
 
 def _blob_headers():
