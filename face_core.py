@@ -6,14 +6,34 @@ import csv
 from datetime import datetime
 
 # Constants
-DATASET_DIR = "dataset"
-MODEL_FILE = "model.yml"
-LABELS_FILE = "labels.npy"
-ATTENDANCE_FILE_PREFIX = "attendance_"
+IS_VERCEL = "VERCEL" in os.environ or "AWS_LAMBDA_FUNCTION_NAME" in os.environ
 
-# Ensure dataset directory exists
-if not os.path.exists(DATASET_DIR):
-    os.makedirs(DATASET_DIR)
+if IS_VERCEL:
+    DATASET_DIR = "/tmp/dataset"
+    MODEL_FILE = "/tmp/model.yml"
+    LABELS_FILE = "/tmp/labels.npy"
+    ATTENDANCE_FILE_PREFIX = "/tmp/attendance_"
+else:
+    DATASET_DIR = "dataset"
+    MODEL_FILE = "model.yml"
+    LABELS_FILE = "labels.npy"
+    ATTENDANCE_FILE_PREFIX = "attendance_"
+
+def get_model_path():
+    if IS_VERCEL:
+        if os.path.exists(MODEL_FILE):
+            return MODEL_FILE
+        if os.path.exists("model.yml"):
+            return "model.yml"
+    return MODEL_FILE
+
+def get_labels_path():
+    if IS_VERCEL:
+        if os.path.exists(LABELS_FILE):
+            return LABELS_FILE
+        if os.path.exists("labels.npy"):
+            return "labels.npy"
+    return LABELS_FILE
 
 def save_face_image(person_name, image_data_base64):
     """
@@ -114,11 +134,13 @@ labels_map = None
 
 def load_resources():
     global recognizer, labels_map
-    if os.path.exists(MODEL_FILE) and os.path.exists(LABELS_FILE):
+    model_path = get_model_path()
+    labels_path = get_labels_path()
+    if os.path.exists(model_path) and os.path.exists(labels_path):
         try:
             recognizer = cv2.face.LBPHFaceRecognizer_create()
-            recognizer.read(MODEL_FILE)
-            labels_map = np.load(LABELS_FILE, allow_pickle=True).item()
+            recognizer.read(model_path)
+            labels_map = np.load(labels_path, allow_pickle=True).item()
             return True
         except Exception as e:
             print(f"Error loading resources: {e}")
@@ -127,9 +149,7 @@ def load_resources():
 
 import json
 
-# ... (imports remain the same)
 
-# ... (previous code)
 
 def recognize_face(image_data_base64):
     """
@@ -191,6 +211,17 @@ def log_attendance(name, confidence, details=None):
         today_str = datetime.now().strftime("%Y-%m-%d")
         filename = f"{ATTENDANCE_FILE_PREFIX}{today_str}.csv"
         
+        # On Vercel, if today's attendance log is in the root directory but not yet in /tmp,
+        # copy it to /tmp so we can read and append to it.
+        if IS_VERCEL and not os.path.exists(filename):
+            root_filename = f"attendance_{today_str}.csv"
+            if os.path.exists(root_filename):
+                import shutil
+                try:
+                    shutil.copy(root_filename, filename)
+                except Exception as e:
+                    print(f"Error copying attendance log: {e}")
+
         # Check if already logged
         if os.path.exists(filename):
             with open(filename, 'r') as f:
@@ -222,6 +253,13 @@ def get_attendance_logs(date_str=None):
         date_str = datetime.now().strftime("%Y-%m-%d")
         
     filename = f"{ATTENDANCE_FILE_PREFIX}{date_str}.csv"
+    
+    # On Vercel, if the log file does not exist in /tmp, check if it was pre-packaged in root
+    if IS_VERCEL and not os.path.exists(filename):
+        root_filename = f"attendance_{date_str}.csv"
+        if os.path.exists(root_filename):
+            filename = root_filename
+
     logs = []
     
     if os.path.exists(filename):
@@ -263,8 +301,9 @@ def get_model_stats():
             count += len([f for f in os.listdir(path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
         stats["total_images"] = count
         
-    if os.path.exists(MODEL_FILE):
-        mtime = os.path.getmtime(MODEL_FILE)
+    model_path = get_model_path()
+    if os.path.exists(model_path):
+        mtime = os.path.getmtime(model_path)
         stats["last_trained"] = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
         
     return stats
