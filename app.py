@@ -120,11 +120,10 @@ def api_clear():
 def api_debug():
     import cv2
     cascade_path = face_core.get_cascade_path()
-    dataset_dir = face_core.DATASET_DIR
-    model_file = face_core.MODEL_FILE
-    labels_file = face_core.LABELS_FILE
+    resolved_model = face_core.get_model_path()
+    resolved_labels = face_core.get_labels_path()
     script_dir = face_core._SCRIPT_DIR
-    
+
     # List root dir files
     try:
         root_files = os.listdir(script_dir)
@@ -133,29 +132,34 @@ def api_debug():
 
     # List dataset contents
     dataset_info = {}
-    for d in [dataset_dir, os.path.join(script_dir, 'dataset')]:
+    for d in [face_core.DATASET_DIR, os.path.join(script_dir, 'dataset')]:
         if os.path.exists(d):
             try:
                 people = os.listdir(d)
-                dataset_info[d] = {p: len(os.listdir(os.path.join(d, p))) 
+                dataset_info[d] = {p: len(os.listdir(os.path.join(d, p)))
                                    for p in people if os.path.isdir(os.path.join(d, p))}
             except Exception as e:
                 dataset_info[d] = str(e)
+
+    # Try loading recognizer to confirm model is readable
+    load_ok = face_core.load_resources()
 
     return jsonify({
         "cwd": os.getcwd(),
         "script_dir": script_dir,
         "cascade_path": cascade_path,
         "cascade_exists": os.path.exists(cascade_path),
-        "model_exists": os.path.exists(model_file),
-        "labels_exists": os.path.exists(labels_file),
-        "model_path": model_file,
-        "labels_path": labels_file,
+        "resolved_model_path": resolved_model,
+        "model_exists": os.path.exists(resolved_model),
+        "resolved_labels_path": resolved_labels,
+        "labels_exists": os.path.exists(resolved_labels),
+        "model_loaded_ok": load_ok,
+        "DATASET_DIR": face_core.DATASET_DIR,
         "opencv_version": cv2.__version__,
         "IS_VERCEL": face_core.IS_VERCEL,
         "root_files": root_files,
         "dataset_info": dataset_info,
-        "env_vars": {k: v for k, v in os.environ.items() 
+        "env_vars": {k: v for k, v in os.environ.items()
                      if any(x in k for x in ['VERCEL', 'AWS', 'PYTHON'])}
     })
 
